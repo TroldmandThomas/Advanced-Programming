@@ -47,10 +47,31 @@ evalSimple _                       = error "Functionality for 'If, Var, Let and 
 
 
 evalFull :: Exp -> Env -> Integer
-evalFull (If e1 _ e3) _ | ((evalSimple e1) == 0)    = evalSimple e3
-evalFull (If  _ e2 _) _                             = evalSimple e2
-evalFull (Var (Just e))                             =  
-evalFull _ _                                        = error "Not implemented yet"
+evalFull (Cst c) _                                       = c
+evalFull (Add e1 e2) env                                 = (evalFull e1 env) + (evalFull e2 env)
+evalFull (Sub e1 e2) env                                 = (evalFull e1 env) - (evalFull e2 env)
+evalFull (Mul e1 e2) env                                 = (evalFull e1 env) * (evalFull e2 env)
+evalFull (Div e1 e2) env                                 = (evalFull e1 env) `div` (evalFull e2 env)
+evalFull (Pow _ (Cst 0)) _                               = 1 :: Integer          --maybe redundant case
+evalFull (Pow _ (Cst c)) _ | c < 0                       = error "Power must be non-negative"
+evalFull (Pow e1 e2) env                                 = (evalFull e1 env) ^ (evalFull e2 env)
+evalFull (If e1 _ e3) env | ((evalFull e1 env) == 0)     = evalFull e3 env
+evalFull (If  _ e2 _) env                                = evalFull e2 env
+evalFull (Var var) env                                   =  case env var of
+                                                             Just n -> n
+                                                             Nothing -> error "Variable was not in environment" 
+evalFull (Let var aux body) env                          = let aux' = evalFull aux env 
+                                                               env' = extendEnv var aux' env
+                                                            in evalFull body env'   
+--evalFull (Add e1 e2)                                = (evalFull e1) + (evalFull e2) 
+evalFull (Sum var from to body) env                   = let n1 = evalFull from env
+                                                            n2 = evalFull to env
+                                                            env' = extendEnv var n1 env
+                                                        in if n1 > n2
+                                                                then 0 :: Integer
+                                                                else evalFull body env' + 
+                                                                     evalFull (Sum var (Cst (n1+1)) to body) env
+evalFull _ _                                             = error "Not implemented yet"
         
  
 testIf  = show (evalFull (If (Sub (Cst 2) (Cst 2)) (Div (Cst 3) (Cst 0)) (Cst 5)) initEnv)
@@ -65,6 +86,29 @@ extendEnv v n r = \e -> if (e == v)
                            else r e
 
 
+r' = extendEnv "x" 55 initEnv
+r'' = extendEnv "x" 2 r'
+
+vartest = show $ evalFull (Var "x") r'
+vartest2 = show $ evalFull (Add (Var "x") (Var "x")) r'
+vartest3 = show $ evalFull (Add (Var "x") (Var "x")) r''
+vartest4 = show $ evalFull (Add (Var "y") (Var "x")) r''
+
+
+lettest = show $ evalFull (Let {var = "x", aux = Cst 5,
+                               body = Add (Let {var = "x", aux = Add (Cst 3) (Cst 4),
+                               body = Mul (Var "x") (Var "x")})
+                               (Var "x")} ) initEnv
+--error case
+--Evaluate to 5, since we simulate lazy evaluation. 
+--lazy evaluation seems natural, since we use Haskell.
+lettest2 = show $ evalFull (Let "x" (Div (Cst 4) (Cst 0)) (Cst 5)) initEnv
+
+
+
+sumtest = show $ evalFull (Sum {var = "i", from = (Cst 0), to = (Cst 3), 
+                                body = (Add (Var "i") (Cst 0))}) initEnv
+    
 
 
 
@@ -120,8 +164,14 @@ main = do
     putStrLn o
     putStrLn testIf
     putStrLn testIf2
-
-
+    putStrLn ""
+    putStrLn vartest
+    putStrLn vartest2
+    putStrLn vartest3
+  --  putStrLn vartest4
+    putStrLn lettest
+    putStrLn lettest2
+    putStrLn sumtest
 
 
 
